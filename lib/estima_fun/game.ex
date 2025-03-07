@@ -20,6 +20,7 @@ defmodule EstimaFun.Game do
     :timer_ref,
     # Add round statistics
     :round_stats,
+    :time_remaining,
     settings: %{
       points_per_round: 10,
       scoring_strategy: :closest_wins,
@@ -321,6 +322,29 @@ defmodule EstimaFun.Game do
     end
   end
 
+  def force_finish_round(game = %{state: :playing}) do
+    # Add default answers (0) for players who didn't answer
+    current_answers = game.current_answers
+    all_players_answers = Enum.reduce(game.players, current_answers, fn player, acc ->
+      if Map.has_key?(acc, player.id) do
+        acc
+      else
+        Map.put(acc, player.id, 0)
+      end
+    end)
+
+    game = %{game | current_answers: all_players_answers}
+
+    # Process the round with all answers (including defaults)
+    game
+    |> calculate_scores()
+    |> calculate_round_stats()
+    |> set_round_winners()
+    |> set_state(:showing_results)
+  end
+
+  def force_finish_round(game), do: game
+
   def continue_to_next_round(game = %{state: :showing_results}) do
     next_index = game.current_question_index + 1
 
@@ -461,4 +485,6 @@ defmodule EstimaFun.Game do
   end
 
   def update_settings(game, _), do: game
+
+  def questions, do: @questions
 end

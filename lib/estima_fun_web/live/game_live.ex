@@ -33,7 +33,7 @@ defmodule EstimaFunWeb.GameLive do
     {:ok, _pid} =
       DynamicSupervisor.start_child(
         EstimaFun.GameSupervisor,
-        {Game, name: via_tuple(name), owner_id: user_id}
+        {EstimaFun.GameServer, name: via_tuple(name), owner_id: user_id}
       )
 
     {:noreply, push_patch(socket, to: "/game?name=#{name}")}
@@ -49,14 +49,14 @@ defmodule EstimaFunWeb.GameLive do
       score: 0
     }
 
-    GenServer.cast(via_tuple(socket.assigns.name), {:add_player, player})
+    EstimaFun.GameServer.join_game(via_tuple(socket.assigns.name), player)
 
     {:noreply, assign_game(socket)}
   end
 
   def handle_event("start_game", _params, %{assigns: %{game: game, user_id: user_id}} = socket) do
     if game.owner_id == user_id do
-      GenServer.cast(via_tuple(socket.assigns.name), :start)
+      EstimaFun.GameServer.start_game(via_tuple(socket.assigns.name))
     end
 
     {:noreply, assign_game(socket)}
@@ -65,9 +65,10 @@ defmodule EstimaFunWeb.GameLive do
   def handle_event("submit_answer", %{"answer" => answer}, socket) do
     {answer, _} = Integer.parse(answer)
 
-    GenServer.cast(
+    EstimaFun.GameServer.submit_answer(
       via_tuple(socket.assigns.name),
-      {:submit_answer, {socket.assigns.user_id, answer}}
+      socket.assigns.user_id,
+      answer
     )
 
     {:noreply, assign(socket, :current_answer, answer)}
@@ -75,7 +76,7 @@ defmodule EstimaFunWeb.GameLive do
 
   def handle_event("continue", _params, %{assigns: %{game: game, user_id: user_id}} = socket) do
     if game.owner_id == user_id do
-      GenServer.cast(via_tuple(socket.assigns.name), :continue)
+      EstimaFun.GameServer.continue(via_tuple(socket.assigns.name))
     end
 
     {:noreply, assign_game(socket)}
@@ -84,7 +85,10 @@ defmodule EstimaFunWeb.GameLive do
   def handle_event("update_settings", %{"num_questions" => num_questions}, socket) do
     if socket.assigns.game.owner_id == socket.assigns.user_id do
       {num_questions, _} = Integer.parse(num_questions)
-      GenServer.cast(via_tuple(socket.assigns.name), {:update_settings, %{num_questions: num_questions}})
+      EstimaFun.GameServer.update_settings(
+        via_tuple(socket.assigns.name),
+        %{num_questions: num_questions, owner_id: socket.assigns.user_id}
+      )
     end
 
     {:noreply, assign_game(socket)}
@@ -188,7 +192,7 @@ defmodule EstimaFunWeb.GameLive do
   end
 
   defp assign_game(%{assigns: %{name: name}} = socket) do
-    game = GenServer.call(via_tuple(name), :game)
+    game = GenServer.call(via_tuple(name), :get_game)
     assign(socket, game: game)
   end
 end
