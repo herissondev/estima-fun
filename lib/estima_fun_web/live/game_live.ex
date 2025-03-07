@@ -81,6 +81,15 @@ defmodule EstimaFunWeb.GameLive do
     {:noreply, assign_game(socket)}
   end
 
+  def handle_event("update_settings", %{"num_questions" => num_questions}, socket) do
+    if socket.assigns.game.owner_id == socket.assigns.user_id do
+      {num_questions, _} = Integer.parse(num_questions)
+      GenServer.cast(via_tuple(socket.assigns.name), {:update_settings, %{num_questions: num_questions}})
+    end
+
+    {:noreply, assign_game(socket)}
+  end
+
   def handle_info({:game_updated, game}, socket) do
     IO.puts("Received game update")  # Debug line
     {:noreply, assign(socket, game: game)}
@@ -101,33 +110,43 @@ defmodule EstimaFunWeb.GameLive do
           <h1 class="text-3xl font-bold text-gray-900">Estimation Game</h1>
         </div>
 
-        <%= case @game.state do %>
-          <% :waiting -> %>
-            <GameComponents.waiting_room
-              game={@game}
-              player_in_game={@player_in_game?}
-              is_owner={@is_owner}
-              default_name={@default_name}
-            />
+        <%!-- Si la partie n'a pas commencé, tout le monde peut la voir --%>
+        <%= if @game.state == :waiting do %>
+          <GameComponents.waiting_room
+            game={@game}
+            player_in_game={@player_in_game?}
+            is_owner={@is_owner}
+            default_name={@default_name}
+          />
+        <% end %>
 
-          <% :playing -> %>
-            <GameComponents.playing
-              game={@game}
-              current_question={@current_question}
-              has_answered={@has_answered?}
-            />
+        <%!-- Si la partie est en cours ou terminée et que le joueur en fait partie --%>
+        <%= if @player_in_game? and @game.state != :waiting do %>
+          <%= case @game.state do %>
+            <% :playing -> %>
+              <GameComponents.playing
+                game={@game}
+                current_question={@current_question}
+                has_answered={@has_answered?}
+              />
 
-          <% :showing_results -> %>
-            <GameComponents.showing_results
-              game={@game}
-              current_question={@current_question}
-              is_owner={@is_owner}
-            />
+            <% :showing_results -> %>
+              <GameComponents.showing_results
+                game={@game}
+                current_question={@current_question}
+                is_owner={@is_owner}
+              />
 
-          <% :finished -> %>
-            <GameComponents.game_over
-              game={@game}
-            />
+            <% :finished -> %>
+              <GameComponents.game_over
+                game={@game}
+              />
+          <% end %>
+        <% end %>
+
+        <%!-- Si la partie est en cours et que le joueur n'en fait pas partie --%>
+        <%= if @game.state != :waiting and not @player_in_game? do %>
+          <GameComponents.game_already_started />
         <% end %>
       </div>
     </div>

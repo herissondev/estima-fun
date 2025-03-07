@@ -24,7 +24,8 @@ defmodule EstimaFun.Game do
       points_per_round: 10,
       scoring_strategy: :closest_wins,
       # 30 seconds in milliseconds
-      results_display_time: 30_000
+      results_display_time: 30_000,
+      num_questions: 10  # Ajout du paramètre par défaut
     }
   ]
 
@@ -206,12 +207,12 @@ defmodule EstimaFun.Game do
         _ -> name
       end
 
-    GenServer.start_link(__MODULE__, {@questions, owner_id, game_name}, name: name)
+    GenServer.start_link(__MODULE__, {owner_id, game_name}, name: name)
   end
 
   @impl true
-  def init({questions, owner_id, game_name}) do
-    {:ok, Game.new(questions, owner_id, game_name)}
+  def init({owner_id, game_name}) do
+    {:ok, Game.new(@questions, owner_id, game_name)}
   end
 
   @impl true
@@ -254,22 +255,32 @@ defmodule EstimaFun.Game do
     {:noreply, new_game}
   end
 
+  @impl true
+  def handle_cast({:update_settings, new_settings}, game) do
+    new_game = update_settings(game, new_settings)
+    broadcast_update(new_game)
+    {:noreply, new_game}
+  end
+
   def new(questions, owner_id, game_name, settings \\ %{}) do
-    game = %__MODULE__{
+    settings = Map.merge(%{
+      points_per_round: 10,
+      results_display_time: 30_000,
+      num_questions: 10
+    }, settings)
+
+    %__MODULE__{
       id: game_name,
       state: :waiting,
       owner_id: owner_id,
       players: [],
-      questions: questions,
+      questions: Enum.take_random(questions, settings.num_questions),
       current_question_index: 0,
       current_answers: %{},
       round_winners: [],
       round_stats: %{},
-      settings: Map.merge(%{points_per_round: 10, results_display_time: 30_000}, settings)
+      settings: settings
     }
-
-    # Don't add the owner as player automatically anymore
-    game
   end
 
   def add_player(game = %{state: :waiting}, player) do
@@ -437,4 +448,17 @@ defmodule EstimaFun.Game do
       {:game_updated, game}
     )
   end
+
+  def update_settings(game = %{state: :waiting}, new_settings) do
+    updated_settings = Map.merge(game.settings, new_settings)
+    # Mélanger et prendre le bon nombre de questions
+    selected_questions = Enum.take_random(@questions, updated_settings.num_questions)
+
+    %{game |
+      settings: updated_settings,
+      questions: selected_questions
+    }
+  end
+
+  def update_settings(game, _), do: game
 end
